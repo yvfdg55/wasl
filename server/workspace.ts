@@ -5,7 +5,11 @@ import { getDb } from "./db";
 import { storageGetSignedUrl, storagePut } from "./storage";
 
 export const MAX_ARCHIVE_BYTES = 25 * 1024 * 1024;
-export const AGENT_TOKEN_PREFIX = "wasl_ak_";
+export type AgentKeyScope = "full" | "github_upload";
+export const AGENT_TOKEN_PREFIX: Record<AgentKeyScope, string> = {
+  full: "wasl_ak_",
+  github_upload: "wasl_gh_",
+};
 
 function requireDb() {
   return getDb().then(db => {
@@ -175,19 +179,19 @@ export async function addAgentMessage(repositoryId: string, taskId: string | und
 
 export async function listAgentKeys(ownerId: number) {
   const db = await requireDb();
-  return db.select({ id: agentApiKeys.id, label: agentApiKeys.label, tokenPrefix: agentApiKeys.tokenPrefix, revokedAt: agentApiKeys.revokedAt, lastUsedAt: agentApiKeys.lastUsedAt, createdAt: agentApiKeys.createdAt })
+  return db.select({ id: agentApiKeys.id, label: agentApiKeys.label, scope: agentApiKeys.scope, tokenPrefix: agentApiKeys.tokenPrefix, revokedAt: agentApiKeys.revokedAt, lastUsedAt: agentApiKeys.lastUsedAt, createdAt: agentApiKeys.createdAt })
     .from(agentApiKeys).where(eq(agentApiKeys.ownerId, ownerId)).orderBy(desc(agentApiKeys.createdAt));
 }
 
-export async function createAgentKey(ownerId: number, label: string) {
+export async function createAgentKey(ownerId: number, label: string, scope: AgentKeyScope = "full") {
   const db = await requireDb();
-  const token = `${AGENT_TOKEN_PREFIX}${randomBytes(32).toString("base64url")}`;
+  const token = `${AGENT_TOKEN_PREFIX[scope]}${randomBytes(32).toString("base64url")}`;
   const id = randomUUID();
   await db.insert(agentApiKeys).values({
     id, ownerId, label: label.trim().slice(0, 80), tokenHash: createHash("sha256").update(token).digest("hex"),
-    tokenPrefix: token.slice(0, 16),
+    tokenPrefix: token.slice(0, 16), scope,
   });
-  return { id, label: label.trim(), token };
+  return { id, label: label.trim(), scope, token };
 }
 
 export async function revokeAgentKey(ownerId: number, keyId: string) {
@@ -197,7 +201,7 @@ export async function revokeAgentKey(ownerId: number, keyId: string) {
 }
 
 export async function authenticateAgentToken(token: string) {
-  if (token.length > 100 || !/^wasl_ak_[A-Za-z0-9_-]{43}$/.test(token)) return null;
+  if (token.length > 100 || !/^wasl_(?:ak|gh)_[A-Za-z0-9_-]{43}$/.test(token)) return null;
   const db = await requireDb();
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const [key] = await db.select().from(agentApiKeys).where(and(eq(agentApiKeys.tokenHash, tokenHash), isNull(agentApiKeys.revokedAt))).limit(1);

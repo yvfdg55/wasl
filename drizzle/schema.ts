@@ -29,6 +29,7 @@ export const agentApiKeys = mysqlTable("agent_api_keys", {
   label: varchar("label", { length: 80 }).notNull(),
   tokenHash: varchar("tokenHash", { length: 64 }).notNull().unique(),
   tokenPrefix: varchar("tokenPrefix", { length: 20 }).notNull(),
+  scope: mysqlEnum("scope", ["full", "github_upload"]).default("full").notNull(),
   revokedAt: timestamp("revokedAt"),
   lastUsedAt: timestamp("lastUsedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

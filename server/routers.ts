@@ -52,7 +52,7 @@ export const appRouter = router({
     activity: router({ list: protectedProcedure.input(z.object({ repositoryId: repoId.optional() }).optional()).query(({ ctx, input }) => listActivities(ctx.user.id, input?.repositoryId)) }),
     agents: router({
       listKeys: protectedProcedure.query(({ ctx }) => listAgentKeys(ctx.user.id)),
-      createKey: protectedProcedure.input(z.object({ label: z.string().trim().min(1).max(80) })).mutation(({ ctx, input }) => createAgentKey(ctx.user.id, input.label)),
+      createKey: protectedProcedure.input(z.object({ label: z.string().trim().min(1).max(80), scope: z.enum(["full", "github_upload"]).default("full") })).mutation(({ ctx, input }) => createAgentKey(ctx.user.id, input.label, input.scope)),
       revokeKey: protectedProcedure.input(z.object({ id: repoId })).mutation(({ ctx, input }) => revokeAgentKey(ctx.user.id, input.id)),
     }),
   }),

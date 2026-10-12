@@ -1,0 +1,1 @@
+ALTER TABLE `agent_api_keys` ADD `scope` enum('full','github_upload') DEFAULT 'full' NOT NULL;

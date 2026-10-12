@@ -17,6 +17,10 @@ api.use(asyncRoute(async (req, res, next) => {
     res.status(401).json({ error: "مفتاح API غير صالح أو ملغى" });
     return;
   }
+  if (key.scope !== "full") {
+    res.status(403).json({ error: "هذا مفتاح تصدير GitHub محدود؛ استخدم /api/github-upload/v1", code: "wrong_key_scope" });
+    return;
+  }
   (req as AgentRequest).agentOwnerId = key.ownerId;
   (req as AgentRequest).agentLabel = key.label;
   next();
