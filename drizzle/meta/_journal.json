@@ -29,6 +29,13 @@
       "when": 1792070220994,
       "tag": "0003_magenta_taskmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1792080441937,
+      "tag": "0004_petite_maginty",
+      "breakpoints": true
     }
   ]
 }

@@ -29,7 +29,7 @@ export const agentApiKeys = mysqlTable("agent_api_keys", {
   label: varchar("label", { length: 80 }).notNull(),
   tokenHash: varchar("tokenHash", { length: 64 }).notNull().unique(),
   tokenPrefix: varchar("tokenPrefix", { length: 20 }).notNull(),
-  scope: mysqlEnum("scope", ["full", "github_upload", "repository_edit"]).default("full").notNull(),
+  scope: mysqlEnum("scope", ["full", "github_upload", "repository_edit", "repository_upload"]).default("full").notNull(),
   scopedRepositoryId: varchar("scopedRepositoryId", { length: 36 }).references(() => repositories.id, { onDelete: "cascade" }),
   revokedAt: timestamp("revokedAt"),
   lastUsedAt: timestamp("lastUsedAt"),
