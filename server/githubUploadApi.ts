@@ -17,7 +17,8 @@ api.use(asyncRoute(async (req, res, next) => {
     return;
   }
   if (key.scope !== "github_upload") {
-    res.status(403).json({ error: "هذا مفتاح إدارة وصل الكامل؛ استخدم /api/agents/v1", code: "wrong_key_scope" });
+    const endpoint = key.scope === "full" ? "/api/agents/v1" : "/api/repository-agent/v1";
+    res.status(403).json({ error: `هذا المفتاح غير مخصص لتصدير GitHub؛ استخدم ${endpoint}`, code: "wrong_key_scope" });
     return;
   }
   (req as GithubUploadRequest).agentOwnerId = key.ownerId;

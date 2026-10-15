@@ -52,7 +52,11 @@ export const appRouter = router({
     activity: router({ list: protectedProcedure.input(z.object({ repositoryId: repoId.optional() }).optional()).query(({ ctx, input }) => listActivities(ctx.user.id, input?.repositoryId)) }),
     agents: router({
       listKeys: protectedProcedure.query(({ ctx }) => listAgentKeys(ctx.user.id)),
-      createKey: protectedProcedure.input(z.object({ label: z.string().trim().min(1).max(80), scope: z.enum(["full", "github_upload"]).default("full") })).mutation(({ ctx, input }) => createAgentKey(ctx.user.id, input.label, input.scope)),
+      createKey: protectedProcedure.input(z.object({ label: z.string().trim().min(1).max(80), scope: z.enum(["full", "github_upload", "repository_edit"]).default("full"), repositoryId: repoId.optional() })).mutation(({ ctx, input }) => {
+        if (input.scope === "repository_edit" && !input.repositoryId) throw new TRPCError({ code: "BAD_REQUEST", message: "اختر المستودع الذي سيقتصر عليه المفتاح" });
+        if (input.scope !== "repository_edit" && input.repositoryId) throw new TRPCError({ code: "BAD_REQUEST", message: "معرّف المستودع لا يقبل إلا مع مفتاح المستودع الواحد" });
+        return createAgentKey(ctx.user.id, input.label, input.scope, input.repositoryId);
+      }),
       revokeKey: protectedProcedure.input(z.object({ id: repoId })).mutation(({ ctx, input }) => revokeAgentKey(ctx.user.id, input.id)),
     }),
   }),

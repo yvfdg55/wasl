@@ -29,11 +29,15 @@ export const agentApiKeys = mysqlTable("agent_api_keys", {
   label: varchar("label", { length: 80 }).notNull(),
   tokenHash: varchar("tokenHash", { length: 64 }).notNull().unique(),
   tokenPrefix: varchar("tokenPrefix", { length: 20 }).notNull(),
-  scope: mysqlEnum("scope", ["full", "github_upload"]).default("full").notNull(),
+  scope: mysqlEnum("scope", ["full", "github_upload", "repository_edit"]).default("full").notNull(),
+  scopedRepositoryId: varchar("scopedRepositoryId", { length: 36 }).references(() => repositories.id, { onDelete: "cascade" }),
   revokedAt: timestamp("revokedAt"),
   lastUsedAt: timestamp("lastUsedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, table => ({ owner: index("agent_api_keys_owner_idx").on(table.ownerId) }));
+}, table => ({
+  owner: index("agent_api_keys_owner_idx").on(table.ownerId),
+  scopedRepository: index("agent_api_keys_scoped_repository_idx").on(table.scopedRepositoryId),
+}));
 
 export const repositoryVersions = mysqlTable("repository_versions", {
   id: varchar("id", { length: 36 }).primaryKey(),

@@ -22,6 +22,13 @@
       "when": 1791839451539,
       "tag": "0002_bumpy_lenny_balinger",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1792070220994,
+      "tag": "0003_magenta_taskmaster",
+      "breakpoints": true
     }
   ]
 }

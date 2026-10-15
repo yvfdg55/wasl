@@ -5,10 +5,11 @@ import { getDb } from "./db";
 import { storageGetSignedUrl, storagePut } from "./storage";
 
 export const MAX_ARCHIVE_BYTES = 25 * 1024 * 1024;
-export type AgentKeyScope = "full" | "github_upload";
+export type AgentKeyScope = "full" | "github_upload" | "repository_edit";
 export const AGENT_TOKEN_PREFIX: Record<AgentKeyScope, string> = {
   full: "wasl_ak_",
   github_upload: "wasl_gh_",
+  repository_edit: "wasl_re_",
 };
 
 function requireDb() {
@@ -98,7 +99,7 @@ export async function getArchiveDownload(ownerId: number, repositoryId: string, 
   return { ...version, url: await storageGetSignedUrl(version.storageKey) };
 }
 
-export async function restoreVersion(ownerId: number, repositoryId: string, versionId: string, actorName: string) {
+export async function restoreVersion(ownerId: number, repositoryId: string, versionId: string, actorName: string, actorType: "user" | "agent" = "user") {
   const repo = await getOwnedRepository(ownerId, repositoryId, true);
   if (!repo) throw new Error("المستودع غير موجود");
   const db = await requireDb();
@@ -117,7 +118,7 @@ export async function restoreVersion(ownerId: number, repositoryId: string, vers
     await tx.update(repositories).set({ currentVersionId: id, archivedAt: null, updatedAt: new Date() }).where(eq(repositories.id, repositoryId));
     return { sourceVersion: source.versionNumber, versionNumber };
   });
-  await addActivity(repositoryId, "user", actorName, "restore", `استعاد النسخة ${restored.sourceVersion}`);
+  await addActivity(repositoryId, actorType, actorName, "restore", `استعاد النسخة ${restored.sourceVersion}`);
   return { id, versionNumber: restored.versionNumber };
 }
 
@@ -179,19 +180,23 @@ export async function addAgentMessage(repositoryId: string, taskId: string | und
 
 export async function listAgentKeys(ownerId: number) {
   const db = await requireDb();
-  return db.select({ id: agentApiKeys.id, label: agentApiKeys.label, scope: agentApiKeys.scope, tokenPrefix: agentApiKeys.tokenPrefix, revokedAt: agentApiKeys.revokedAt, lastUsedAt: agentApiKeys.lastUsedAt, createdAt: agentApiKeys.createdAt })
-    .from(agentApiKeys).where(eq(agentApiKeys.ownerId, ownerId)).orderBy(desc(agentApiKeys.createdAt));
+  return db.select({ id: agentApiKeys.id, label: agentApiKeys.label, scope: agentApiKeys.scope, scopedRepositoryId: agentApiKeys.scopedRepositoryId, scopedRepositoryName: repositories.name, scopedRepositoryArchivedAt: repositories.archivedAt, tokenPrefix: agentApiKeys.tokenPrefix, revokedAt: agentApiKeys.revokedAt, lastUsedAt: agentApiKeys.lastUsedAt, createdAt: agentApiKeys.createdAt })
+    .from(agentApiKeys).leftJoin(repositories, eq(agentApiKeys.scopedRepositoryId, repositories.id)).where(eq(agentApiKeys.ownerId, ownerId)).orderBy(desc(agentApiKeys.createdAt));
 }
 
-export async function createAgentKey(ownerId: number, label: string, scope: AgentKeyScope = "full") {
+export async function createAgentKey(ownerId: number, label: string, scope: AgentKeyScope = "full", scopedRepositoryId?: string) {
   const db = await requireDb();
+  if (scope === "repository_edit" && !scopedRepositoryId) throw new Error("اختر المستودع الذي سيقتصر عليه المفتاح");
+  if (scope !== "repository_edit" && scopedRepositoryId) throw new Error("لا يمكن ربط هذا النوع من المفاتيح بمستودع واحد");
+  const scopedRepository = scope === "repository_edit" ? await getOwnedRepository(ownerId, scopedRepositoryId!) : undefined;
+  if (scope === "repository_edit" && !scopedRepository) throw new Error("المستودع غير موجود أو لا تملك صلاحية الوصول إليه");
   const token = `${AGENT_TOKEN_PREFIX[scope]}${randomBytes(32).toString("base64url")}`;
   const id = randomUUID();
   await db.insert(agentApiKeys).values({
     id, ownerId, label: label.trim().slice(0, 80), tokenHash: createHash("sha256").update(token).digest("hex"),
-    tokenPrefix: token.slice(0, 16), scope,
+    tokenPrefix: token.slice(0, 16), scope, scopedRepositoryId: scopedRepository?.id ?? null,
   });
-  return { id, label: label.trim(), scope, token };
+  return { id, label: label.trim(), scope, scopedRepositoryId: scopedRepository?.id ?? null, repositoryName: scopedRepository?.name ?? null, token };
 }
 
 export async function revokeAgentKey(ownerId: number, keyId: string) {
@@ -201,11 +206,12 @@ export async function revokeAgentKey(ownerId: number, keyId: string) {
 }
 
 export async function authenticateAgentToken(token: string) {
-  if (token.length > 100 || !/^wasl_(?:ak|gh)_[A-Za-z0-9_-]{43}$/.test(token)) return null;
+  if (token.length > 100 || !/^wasl_(?:ak|gh|re)_[A-Za-z0-9_-]{43}$/.test(token)) return null;
   const db = await requireDb();
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const [key] = await db.select().from(agentApiKeys).where(and(eq(agentApiKeys.tokenHash, tokenHash), isNull(agentApiKeys.revokedAt))).limit(1);
   if (!key) return null;
+  if (key.scope === "repository_edit" ? !key.scopedRepositoryId : key.scopedRepositoryId !== null) return null;
   await db.update(agentApiKeys).set({ lastUsedAt: new Date() }).where(eq(agentApiKeys.id, key.id));
   return key;
 }

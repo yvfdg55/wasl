@@ -18,7 +18,8 @@ api.use(asyncRoute(async (req, res, next) => {
     return;
   }
   if (key.scope !== "full") {
-    res.status(403).json({ error: "هذا مفتاح تصدير GitHub محدود؛ استخدم /api/github-upload/v1", code: "wrong_key_scope" });
+    const endpoint = key.scope === "github_upload" ? "/api/github-upload/v1" : "/api/repository-agent/v1";
+    res.status(403).json({ error: `هذا المفتاح محدود؛ استخدم ${endpoint}`, code: "wrong_key_scope" });
     return;
   }
   (req as AgentRequest).agentOwnerId = key.ownerId;
@@ -110,7 +111,7 @@ api.get("/repositories/:repositoryId/versions", asyncRoute(async (req, res) => {
 
 api.post("/repositories/:repositoryId/versions/:versionId/restore", asyncRoute(async (req, res) => {
   const { ownerId, label } = agent(req);
-  try { res.json({ version: await restoreVersion(ownerId, req.params.repositoryId, req.params.versionId, label) }); }
+  try { res.json({ version: await restoreVersion(ownerId, req.params.repositoryId, req.params.versionId, label, "agent") }); }
   catch (error) { res.status(404).json({ error: errorMessage(error) }); }
 }));
 

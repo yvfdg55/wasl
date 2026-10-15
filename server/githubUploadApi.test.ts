@@ -60,6 +60,13 @@ describe("GitHub export key scope", () => {
     expect(mocks.listRepositories).not.toHaveBeenCalled();
   });
 
+  it("rejects a repository-edit key on the GitHub-only API", async () => {
+    mocks.authenticateAgentToken.mockResolvedValue({ ownerId: 7, label: "single-project", scope: "repository_edit", scopedRepositoryId: "repo_123" });
+    const response = await fetch(`${baseUrl}/repositories`, { headers: { Authorization: "Bearer wasl_re_example" } });
+    expect(response.status).toBe(403);
+    expect(mocks.listRepositories).not.toHaveBeenCalled();
+  });
+
   it("lists only the owner's exportable repositories", async () => {
     mocks.authenticateAgentToken.mockResolvedValue({ ownerId: 7, label: "publisher", scope: "github_upload" });
     mocks.listRepositories.mockResolvedValue([repository]);
