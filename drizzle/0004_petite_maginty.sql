@@ -1,1 +1,0 @@
-ALTER TABLE `agent_api_keys` MODIFY COLUMN `scope` enum('full','github_upload','repository_edit','repository_upload') NOT NULL DEFAULT 'full';

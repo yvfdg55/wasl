@@ -5,7 +5,6 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerAgentApi } from "../agentApi";
 import { registerGithubUploadApi } from "../githubUploadApi";
 import { registerRepositoryAgentApi } from "../repositoryAgentApi";
-import { registerRepositoryUploadApi } from "../repositoryUploadApi";
 import { registerOAuthRoutes } from "./oauth";
 import { publicPlatformScript } from "./publicConfig";
 import { appRouter } from "../routers";
@@ -25,7 +24,6 @@ async function startServer() {
   registerAgentApi(app);
   registerGithubUploadApi(app);
   registerRepositoryAgentApi(app);
-  registerRepositoryUploadApi(app);
   app.use(
     "/api/trpc",
     createExpressMiddleware({

@@ -5,12 +5,11 @@ import { getDb } from "./db";
 import { storageGetSignedUrl, storagePut } from "./storage";
 
 export const MAX_ARCHIVE_BYTES = 25 * 1024 * 1024;
-export type AgentKeyScope = "full" | "github_upload" | "repository_edit" | "repository_upload";
+export type AgentKeyScope = "full" | "github_upload" | "repository_edit";
 export const AGENT_TOKEN_PREFIX: Record<AgentKeyScope, string> = {
   full: "wasl_ak_",
   github_upload: "wasl_gh_",
   repository_edit: "wasl_re_",
-  repository_upload: "wasl_up_",
 };
 
 function requireDb() {
@@ -45,40 +44,6 @@ export async function createRepository(ownerId: number, name: string, descriptio
   return repo;
 }
 
-/** Atomically creates and binds the first repository for a repository_upload key. */
-export async function getOrCreateUploadKeyRepository(input: {
-  apiKeyId: string; ownerId: number; name?: string; description?: string | null; actorName: string;
-}) {
-  const db = await requireDb();
-  return db.transaction(async tx => {
-    const [key] = await tx.select().from(agentApiKeys)
-      .where(and(eq(agentApiKeys.id, input.apiKeyId), eq(agentApiKeys.ownerId, input.ownerId), isNull(agentApiKeys.revokedAt)))
-      .for("update").limit(1);
-    if (!key || key.scope !== "repository_upload") throw new Error("مفتاح الرفع غير صالح أو ملغى");
-
-    if (key.scopedRepositoryId) {
-      const [repository] = await tx.select().from(repositories)
-        .where(and(eq(repositories.id, key.scopedRepositoryId), eq(repositories.ownerId, input.ownerId))).limit(1);
-      if (!repository) throw new Error("المستودع المرتبط بمفتاح الرفع غير موجود");
-      return { repository, created: false };
-    }
-
-    const name = input.name?.trim();
-    if (!name) throw new Error("اسم المستودع مطلوب عند أول رفع");
-    const repositoryId = randomUUID();
-    await tx.insert(repositories).values({
-      id: repositoryId, ownerId: input.ownerId, name, description: input.description?.trim() || null,
-    });
-    await tx.update(agentApiKeys).set({ scopedRepositoryId: repositoryId }).where(eq(agentApiKeys.id, key.id));
-    await tx.insert(projectActivities).values({
-      id: randomUUID(), repositoryId, actorType: "agent", actorName: input.actorName.slice(0, 120), kind: "created",
-      message: `أنشأ الوكيل المستودع ${name}`,
-    });
-    const [repository] = await tx.select().from(repositories).where(eq(repositories.id, repositoryId)).limit(1);
-    return { repository, created: true };
-  });
-}
-
 export async function addActivity(repositoryId: string, actorType: "user" | "agent" | "system", actorName: string, kind: "created" | "upload" | "version" | "task" | "comment" | "restore", message: string, taskId?: string) {
   const db = await requireDb();
   await db.insert(projectActivities).values({ id: randomUUID(), repositoryId, taskId: taskId ?? null, actorType, actorName: actorName.slice(0, 120), kind, message: message.slice(0, 4000) });
@@ -92,7 +57,7 @@ export async function saveArchive(input: {
   const repo = await getOwnedRepository(input.ownerId, input.repositoryId);
   if (!repo) throw new Error("المستودع غير موجود أو لا تملك صلاحية الوصول إليه");
   if (!input.data.length || input.data.length > MAX_ARCHIVE_BYTES) throw new Error("حجم الملف يجب أن يكون بين 1 بايت و25 ميغابايت");
-  if (!isValidZipStructure(input.data)) throw new Error("الأرشيف ZIP غير مكتمل أو غير صالح");
+  if (!hasValidZipStructure(input.data)) throw new Error("الأرشيف ZIP غير مكتمل أو غير صالح");
   const safeName = input.archiveName.replace(/[\\/\0-\x1f]/g, "_").slice(0, 255) || `${repo.name}.zip`;
   const { key } = await storagePut(`wasl/${input.ownerId}/repositories/${repo.id}/${randomUUID()}.zip`, input.data, "application/zip");
   const db = await requireDb();
@@ -241,13 +206,12 @@ export async function revokeAgentKey(ownerId: number, keyId: string) {
 }
 
 export async function authenticateAgentToken(token: string) {
-  if (token.length > 100 || !/^wasl_(?:ak|gh|re|up)_[A-Za-z0-9_-]{43}$/.test(token)) return null;
+  if (token.length > 100 || !/^wasl_(?:ak|gh|re)_[A-Za-z0-9_-]{43}$/.test(token)) return null;
   const db = await requireDb();
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const [key] = await db.select().from(agentApiKeys).where(and(eq(agentApiKeys.tokenHash, tokenHash), isNull(agentApiKeys.revokedAt))).limit(1);
   if (!key) return null;
-  if (key.scope === "repository_edit" && !key.scopedRepositoryId) return null;
-  if ((key.scope === "full" || key.scope === "github_upload") && key.scopedRepositoryId !== null) return null;
+  if (key.scope === "repository_edit" ? !key.scopedRepositoryId : key.scopedRepositoryId !== null) return null;
   await db.update(agentApiKeys).set({ lastUsedAt: new Date() }).where(eq(agentApiKeys.id, key.id));
   return key;
 }
@@ -264,7 +228,7 @@ export async function updateRepository(ownerId: number, repositoryId: string, in
   return (await db.select().from(repositories).where(eq(repositories.id, repositoryId)).limit(1))[0];
 }
 
-export function isValidZipStructure(data: Buffer) {
+function hasValidZipStructure(data: Buffer) {
   if (data.length < 22) return false;
   const searchStart = Math.max(0, data.length - 22 - 0xffff);
   let endRecord = -1;

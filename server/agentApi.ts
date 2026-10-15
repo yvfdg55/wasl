@@ -18,7 +18,7 @@ api.use(asyncRoute(async (req, res, next) => {
     return;
   }
   if (key.scope !== "full") {
-    const endpoint = key.scope === "github_upload" ? "/api/github-upload/v1" : key.scope === "repository_edit" ? "/api/repository-agent/v1" : "/api/repository-upload/v1";
+    const endpoint = key.scope === "github_upload" ? "/api/github-upload/v1" : "/api/repository-agent/v1";
     res.status(403).json({ error: `هذا المفتاح محدود؛ استخدم ${endpoint}`, code: "wrong_key_scope" });
     return;
   }
